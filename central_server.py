@@ -248,6 +248,18 @@ async def _deliver_to_agent(target_name: str, msg: dict):
     except Exception as e:
         print(f"[Central] ❌ Delivery failed to {target_name}: {e}")
 
+import socket
+
+def get_free_port(start_port: int) -> int:
+    port = start_port
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('0.0.0.0', port))
+                return port
+            except OSError:
+                port += 98
+
 @app.post("/admin/agents/{agent_name}/start")
 async def start_agent(agent_name: str):
     global next_dynamic_port
@@ -258,16 +270,17 @@ async def start_agent(agent_name: str):
     if not agent_path.exists() or not agent_path.is_dir():
         raise HTTPException(status_code=404, detail="Agent directory not found")
     
-    port = next_dynamic_port
-    next_dynamic_port += 1
+    port = get_free_port(next_dynamic_port)
+    next_dynamic_port = port + 98
     
     cmd = ["uv", "run", "python", "agent_host.py", str(port), f"./{agent_name}"]
     try:
         # Start in a new process group so we can kill it later
+        log_file = open(f"logs/{agent_name}_{port}.log", "w")
         proc = subprocess.Popen(
             cmd, 
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL,
+            stdout=log_file, 
+            stderr=subprocess.STDOUT,
             preexec_fn=os.setsid
         )
         processes[agent_name] = proc
