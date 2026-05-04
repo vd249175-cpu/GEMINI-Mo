@@ -120,6 +120,10 @@ async def startup_event():
     if pid == 0: # Child
         os.environ["GEMINI_PROJECT_DIR"] = str(PROJECT_DIR)
         os.environ["CENTRAL_SERVER_URL"] = CENTRAL_SERVER
+        os.environ["LANG"] = "en_US.UTF-8"
+        os.environ["LC_ALL"] = "en_US.UTF-8"
+        os.environ["TERM"] = "xterm-256color"
+        os.environ["COLORTERM"] = "truecolor"
         os.chdir(PROJECT_DIR)
         # Check if gemini is in path, else use dummy
         try:
@@ -130,6 +134,8 @@ async def startup_event():
     else: # Parent
         # Register with central server
         asyncio.create_task(register_with_central(agent_name, PORT))
+        # Initial PTY size
+        set_winsize(master_fd, 24, 80)
         # Start PTY reader thread
         threading.Thread(target=pty_read_thread, daemon=True).start()
 
