@@ -11,20 +11,19 @@ This project provides a comprehensive multi-agent control console with both back
 
 ### Installation & Quick Start
 
-We highly recommend using `uv` to manage the Python environment and dependencies for this project.
+We highly recommend using the provided one-click startup scripts. These scripts will automatically install `uv` (if missing), install all Python and Node.js dependencies, and start both the backend and frontend servers simultaneously.
 
-**1. Install Dependencies**
-Ensure you have `uv` installed, then run:
+**For macOS / Linux:**
 ```bash
-uv sync
+./start.sh
 ```
 
-**2. Start the Application**
-To start the backend server and services:
-```bash
-uv run central_server.py
+**For Windows:**
+```cmd
+start.bat
 ```
-*(Make sure to also start the frontend application using standard Node.js/Vite commands if applicable, for example: `npm run dev` in the `frontend` directory).*
+
+*(If you prefer manual setup, simply run `uv sync` and `npm install` in the `frontend` directory, then start `central_server.py` and `npm run dev` separately).*
 
 ### Note
 The `handswriter-image-gen` skill has been removed from git tracking and remains a local-only capability in the environment.
@@ -38,20 +37,19 @@ The `handswriter-image-gen` skill has been removed from git tracking and remains
 
 ### 安装与启动
 
-推荐使用 `uv` 来管理本项目的 Python 环境和依赖包。
+推荐使用项目提供的一键启动脚本。这些脚本会自动检测并安装 `uv`（如果未安装），安装所有的 Python 和 Node.js 依赖，并同时启动后端服务器和前端应用。
 
-**1. 安装依赖**
-请确保你已经安装了 `uv`，然后在项目根目录下运行：
+**对于 macOS / Linux 用户：**
 ```bash
-uv sync
+./start.sh
 ```
 
-**2. 启动应用**
-启动后端服务器与相关服务：
-```bash
-uv run central_server.py
+**对于 Windows 用户：**
+```cmd
+start.bat
 ```
-*（如需启动前端页面，请进入 `frontend` 目录运行相应的前端启动命令，例如 `npm run dev`）。*
+
+*（如果你更喜欢手动启动，可以分别执行 `uv sync` 和前端目录下的 `npm install`，然后单独启动 `central_server.py` 和 `npm run dev`）。*
 
 ### 备注
 `handswriter-image-gen` 技能已被移出 Git 追踪列表，现在作为本地独立功能保留。
