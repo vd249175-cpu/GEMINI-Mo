@@ -126,7 +126,7 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState("");
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
   const [activeTab, setActiveTab] = useState("graph");
-  const [lang, setLang] = useState(localStorage.getItem("lang") || "zh");
+  const [lang, setLang] = useState(localStorage.getItem("lang") || "en");
   
   const t = (key, params) => {
     let str = i18n[lang][key] || key;
