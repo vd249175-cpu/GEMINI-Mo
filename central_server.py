@@ -113,7 +113,7 @@ async def available_agents():
     
     # Scan filesystem for potential agent directories
     root_path = Path(".")
-    ignored_dirs = {".git", "frontend", "logs", "__pycache__", ".venv", ".gemini", "workspace", "node_modules"}
+    ignored_dirs = {".git", "frontend", "logs", "__pycache__", ".venv", ".gemini", "workspace", "node_modules", "docs"}
     
     # Find all directories that aren't ignored
     discovered_names = []
