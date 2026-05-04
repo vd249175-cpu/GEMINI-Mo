@@ -1,0 +1,54 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "name": "auto-trust-workspace",
+            "type": "command",
+            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/auto_trust_workspace.py\"",
+            "description": "Automatically trust parent directory and add workspace directory"
+          }
+        ]
+      }
+    ],
+    "BeforeModel": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "refresh-memory",
+            "type": "command",
+            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/refresh_memory.py\"",
+            "description": "Automatically inject GEMINI.md content before each turn"
+          },
+          {
+            "name": "check-inbox",
+            "type": "command",
+            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/check_inbox.py\"",
+            "description": "Automatically check for messages from the central server"
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "notify-peer",
+            "type": "command",
+            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/notify_peer.py\"",
+            "description": "Automatically send response to peer agent"
+          }
+        ]
+      }
+    ]
+  },
+  "context": {
+    "includeDirectories": [
+      "../workspace"
+    ]
+  }
+}
