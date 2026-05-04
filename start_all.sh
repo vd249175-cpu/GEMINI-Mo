@@ -18,16 +18,12 @@ get_free_port() {
     echo $port
 }
 
-# 分配端口
+# 分配核心组件端口
 CENTRAL_PORT=$(get_free_port 8000)
-WORKER_PORT=$(get_free_port 5001)
-JUDGE_PORT=$(get_free_port 5002)
 FRONTEND_PORT=$(get_free_port 5173)
 
-echo "🎯 Assigned Ports:"
+echo "🎯 Core Ports:"
 echo "  - Central:  $CENTRAL_PORT"
-echo "  - Worker:   $WORKER_PORT"
-echo "  - Judge:    $JUDGE_PORT"
 echo "  - Frontend: $FRONTEND_PORT"
 
 # 导出环境变量
@@ -38,9 +34,13 @@ export VITE_CENTRAL_URL=$CENTRAL_SERVER_URL
 # 定义退出时的清理函数
 cleanup() {
     echo -e "\n🛑 Stopping all services..."
-    # 杀掉整个进程组
-    kill 0
-    exit
+    # 捕获当前脚本的 PID
+    local self_pid=$$
+    # 杀掉除自己以外的所有同组进程
+    trap - SIGINT SIGTERM # 防止递归
+    kill -TERM -0 2>/dev/null
+    echo "Done."
+    exit 0
 }
 
 # 捕获 Ctrl+C
@@ -53,15 +53,22 @@ PORT=$CENTRAL_PORT uv run python central_server.py > "$LOG_DIR/central.log" 2>&1
 echo "  - [$CENTRAL_PORT] Central Server (Log: logs/central.log)"
 sleep 2
 
-# 2. 启动 Worker Agent
-CENTRAL_SERVER_URL=$CENTRAL_SERVER_URL uv run python agent_host.py $WORKER_PORT ./worker > "$LOG_DIR/worker.log" 2>&1 &
-echo "  - [$WORKER_PORT] Worker Agent   (Log: logs/worker.log)"
+# 2. 自动发现并启动所有 Agent
+AGENT_START_PORT=5001
+for agent_dir in */; do
+    agent_dir=${agent_dir%/}
+    # 检查目录下是否存在 AgentCard.json
+    if [ -f "$agent_dir/AgentCard.json" ]; then
+        AGENT_PORT=$(get_free_port $AGENT_START_PORT)
+        # 更新下一个搜索起点
+        AGENT_START_PORT=$((AGENT_PORT + 1))
+        
+        CENTRAL_SERVER_URL=$CENTRAL_SERVER_URL uv run python agent_host.py $AGENT_PORT "./$agent_dir" > "$LOG_DIR/${agent_dir}.log" 2>&1 &
+        echo "  - [$AGENT_PORT] Agent: ${agent_dir} (Log: logs/${agent_dir}.log)"
+    fi
+done
 
-# 3. 启动 Judge Agent
-CENTRAL_SERVER_URL=$CENTRAL_SERVER_URL uv run python agent_host.py $JUDGE_PORT ./judge > "$LOG_DIR/judge.log" 2>&1 &
-echo "  - [$JUDGE_PORT] Judge Agent    (Log: logs/judge.log)"
-
-# 4. 启动前端
+# 3. 启动前端
 (cd frontend && npm run dev -- --port $FRONTEND_PORT) > "$LOG_DIR/frontend.log" 2>&1 &
 echo "  - [$FRONTEND_PORT] Frontend UI    (Log: logs/frontend.log)"
 

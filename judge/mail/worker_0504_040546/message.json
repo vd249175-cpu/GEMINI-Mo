@@ -1,0 +1,6 @@
+{
+  "from": "worker",
+  "content": "This is a secondary test message from Worker. Confirming that multi-turn communication is working smoothly.",
+  "timestamp": "2026-05-04T10:05:46.243786Z",
+  "message_id": "27b2a3f0b095"
+}

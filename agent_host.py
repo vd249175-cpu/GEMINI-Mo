@@ -79,28 +79,38 @@ def set_winsize(fd, row, col, xpix=0, ypix=0):
 
 def pty_read_thread():
     global master_fd
-    while master_fd is not None:
-        try:
+    try:
+        while master_fd is not None:
             r, _, _ = select.select([master_fd], [], [], 0.1)
             if master_fd in r:
-                data = os.read(master_fd, 4096)
-                if not data:
+                try:
+                    data = os.read(master_fd, 4096)
+                    if not data:
+                        break
+                    
+                    # Mirror to local console
+                    sys.stdout.buffer.write(data)
+                    sys.stdout.buffer.flush()
+
+                    # Add to history
+                    terminal_history.extend(data)
+                    if len(terminal_history) > MAX_HISTORY:
+                        del terminal_history[:len(terminal_history) - MAX_HISTORY]
+
+                    # Broadcast to all connected websockets as bytes
+                    asyncio.run_coroutine_threadsafe(broadcast_terminal(data), loop)
+                except OSError:
                     break
-                
-                # Mirror to local console
-                sys.stdout.buffer.write(data)
-                sys.stdout.buffer.flush()
-
-                # Add to history
-                terminal_history.extend(data)
-                if len(terminal_history) > MAX_HISTORY:
-                    del terminal_history[:len(terminal_history) - MAX_HISTORY]
-
-                # Broadcast to all connected websockets as bytes
-                asyncio.run_coroutine_threadsafe(broadcast_terminal(data), loop)
-        except Exception as e:
-            # PTY might be closed if child exits
-            break
+    except Exception as e:
+        print(f"[Host] PTY read thread error: {e}")
+    finally:
+        if master_fd:
+            try:
+                os.close(master_fd)
+            except:
+                pass
+            master_fd = None
+        print("[Host] PTY closed, read thread exiting")
 
 async def broadcast_terminal(data: bytes):
     for client in terminal_clients:
@@ -109,15 +119,21 @@ async def broadcast_terminal(data: bytes):
         except:
             pass
 
+child_pid = None
+
 @app.on_event("startup")
 async def startup_event():
-    global master_fd, loop
+    global master_fd, loop, child_pid
     loop = asyncio.get_event_loop()
     
     agent_name = PROJECT_DIR.name
     pid, master_fd = pty.fork()
     
     if pid == 0: # Child
+        try:
+            os.setsid() # Create a new process group for the child
+        except:
+            pass
         os.environ["GEMINI_PROJECT_DIR"] = str(PROJECT_DIR)
         os.environ["CENTRAL_SERVER_URL"] = CENTRAL_SERVER
         os.environ["LANG"] = "en_US.UTF-8"
@@ -125,19 +141,38 @@ async def startup_event():
         os.environ["TERM"] = "xterm-256color"
         os.environ["COLORTERM"] = "truecolor"
         os.chdir(PROJECT_DIR)
-        # Check if gemini is in path, else use dummy
-        try:
-            os.execvp("gemini", ["gemini", "--yolo"])
-        except FileNotFoundError:
-            print("gemini CLI not found, falling back to bash")
-            os.execvp("bash", ["bash"])
+        
+        # Run gemini and then exec bash so the terminal stays alive
+        bash_cmd = "if command -v gemini >/dev/null 2>&1; then gemini --yolo; else echo 'gemini CLI not found, dropping to bash...'; fi; exec bash"
+        os.execvp("bash", ["bash", "-c", bash_cmd])
     else: # Parent
+        child_pid = pid
         # Register with central server
         asyncio.create_task(register_with_central(agent_name, PORT))
         # Initial PTY size
         set_winsize(master_fd, 24, 80)
         # Start PTY reader thread
         threading.Thread(target=pty_read_thread, daemon=True).start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global master_fd, child_pid
+    print(f"\n[Host] Shutting down agent {PROJECT_DIR.name}...")
+    if child_pid:
+        try:
+            import signal
+            # Kill the entire process group started by the child
+            os.killpg(child_pid, signal.SIGTERM)
+            print(f"[Host] Terminated child process group {child_pid}")
+        except Exception as e:
+            print(f"[Host] Error terminating child: {e}")
+    
+    if master_fd:
+        try:
+            os.close(master_fd)
+        except:
+            pass
+        master_fd = None
 
 async def register_with_central(name, port):
     # Wait a bit for central server to be ready
@@ -196,54 +231,77 @@ async def terminal_websocket(websocket: WebSocket):
     except WebSocketDisconnect:
         terminal_clients.remove(websocket)
 
+async def smart_pty_write(text: str):
+    global master_fd
+    if not master_fd:
+        return
+        
+    # Check for queued messages in recent history
+    recent = terminal_history[-1000:].decode('utf-8', 'ignore')
+    is_queued = "Queued (press ↑ to edit):" in recent
+    
+    if not is_queued:
+        # Scenario 1: No queue - ESC then message
+        os.write(master_fd, b"\x1b") # ESC
+        await asyncio.sleep(0.1) # 100ms
+        os.write(master_fd, text.encode())
+        await asyncio.sleep(0.1)
+        os.write(master_fd, b"\r") # Submission
+    else:
+        # Scenario 2: Queued - message then ESC
+        os.write(master_fd, text.encode())
+        await asyncio.sleep(0.1)
+        os.write(master_fd, b"\x1b") # ESC
+        await asyncio.sleep(0.1)
+        os.write(master_fd, b"\r")
+
 @app.post("/receive")
 async def receive_mail(request: Request):
     data = await request.json()
-    
-    # Mail System Logic
-    mail_base = PROJECT_DIR / "mail"
-    mail_base.mkdir(parents=True, exist_ok=True)
     sender = data.get("from", "unknown")
+    content = data.get("content", "")
+    files = data.get("files", [])
     now_dt = datetime.now()
-    timestamp_dir = now_dt.strftime("%m%d_%H%M%S")
-    dir_name = f"{sender}_{timestamp_dir}"
-
-    target_dir = mail_base / dir_name
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    # Save message metadata
-    msg_info = {
-        "from": sender,
-        "content": data.get("content"),
-        "timestamp": data.get("timestamp"),
-        "message_id": data.get("message_id")
-    }
-    (target_dir / "message.json").write_text(json.dumps(msg_info, indent=2, ensure_ascii=False))
-
-    # Copy forwarded files
-    for f_path in data.get("files", []):
-        src = Path(f_path)
-        if src.exists():
-            dst = target_dir / src.name
-            if src.is_dir():
-                shutil.copytree(src, dst, dirs_exist_ok=True)
-            else:
-                shutil.copy2(src, dst)
-
-    # Notify terminal
     now_display = now_dt.strftime("%m/%d %H:%M:%S")
-    wake_msg = f"\r\n\r\n[MAIL] {now_display} 来自 {sender} 的新消息。内容已存入 mail/{dir_name}/。\r\n"
 
-    if master_fd:
+    if not files:
+        # Scenario 1: Direct Text Message (No files)
+        # Just notify the terminal directly
+        wake_msg = f"\n[MESSAGE] {now_display} {sender}: {content}"
+        asyncio.create_task(smart_pty_write(wake_msg))
+    else:
+        # Scenario 2: Mail with Attachments
+        mail_base = PROJECT_DIR / "mail"
+        mail_base.mkdir(parents=True, exist_ok=True)
+        timestamp_dir = now_dt.strftime("%m%d_%H%M%S")
+        dir_name = f"{sender}_{timestamp_dir}"
 
-        os.write(master_fd, wake_msg.encode())
-        # Inject Enter key (\r) after a brief delay to ensure it's processed as a command trigger
-        async def inject_enter():
-            await asyncio.sleep(0.5)
-            if master_fd:
-                os.write(master_fd, b"\r")
-        asyncio.create_task(inject_enter())
-        
+        target_dir = mail_base / dir_name
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save message metadata
+        msg_info = {
+            "from": sender,
+            "content": content,
+            "timestamp": data.get("timestamp"),
+            "message_id": data.get("message_id")
+        }
+        (target_dir / "message.json").write_text(json.dumps(msg_info, indent=2, ensure_ascii=False))
+
+        # Copy forwarded files
+        for f_path in files:
+            src = Path(f_path)
+            if src.exists():
+                dst = target_dir / src.name
+                if src.is_dir():
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src, dst)
+
+        # Notify terminal about the mail
+        wake_msg = f"\n[MAIL] {now_display} 来自 {sender} 的新消息（含附件）。内容已存入 mail/{dir_name}/。"
+        asyncio.create_task(smart_pty_write(wake_msg))
+    
     return {"status": "received"}
 
 @app.post("/clone")
@@ -281,6 +339,10 @@ async def get_gemini():
 async def put_gemini(payload: GeminiPayload):
     gemini_path = PROJECT_DIR / "GEMINI.md"
     gemini_path.write_text(payload.content)
+    
+    # Trigger native /memory reload using smart injection
+    asyncio.create_task(smart_pty_write("/memory reload"))
+            
     return {"status": "saved"}
 
 @app.get("/admin/agents/{agent_name}/card")

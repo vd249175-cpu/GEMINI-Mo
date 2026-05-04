@@ -15,7 +15,7 @@
 
 GEMINI-MO 让你同时运行多个 [Gemini CLI](https://github.com/google-gemini/gemini-cli) Agent，并**将它们串联成一个可协作的网络**。
 
-每个 Agent 以 `--yolo` 模式运行，并通过 MCP 工具获得以下能力：
+每个 Agent 以 `--yolo` 模式运行，并拥有以下 **Skill**：
 - 📨 **发送消息** — 按名称向任意在线 Agent 发送文本消息
 - 📁 **发送文件** — 以 base64 格式将文件传递给其他 Agent，自动写入对方工作目录
 - 📬 **异步接收** — 目标 Agent 离线时消息缓存，上线后立即投递
@@ -49,6 +49,7 @@ GEMINI-MO 让你同时运行多个 [Gemini CLI](https://github.com/google-gemini
 - 🌙 **暗色 / 亮色主题** — 一键切换，记住你的偏好
 - 🌏 **国际化** — 英文 / 中文界面（默认英文）
 - ⚡ **动态端口分配** — 自动检测空闲端口，无需手动配置
+- 🛠️ **高度可定制** — 手动拷贝并编辑 `AgentCard.json` 和 `GEMINI.md` 即可快速创建或修改 Agent
 
 ---
 
@@ -72,6 +73,20 @@ chmod +x start_all.sh && ./start_all.sh
 ```cmd
 start.bat
 ```
+
+---
+
+## 管理 Agent
+
+添加 or 自定义 Agent 最简单的方式是通过 **可视化控制台**：
+
+1. **克隆 Agent**：在“网络拓扑”或“终端”视图中，选中一个现有 Agent（如 `worker`），点击工具栏的**克隆**（Copy）按钮。
+2. **命名**：输入新名称（例如 `researcher`），系统会自动创建对应的文件夹和配置文件。
+3. **定制身份**：切换到 **AgentCard** 选项卡。直接在页面上修改 JSON（如名称、描述等），然后点击**保存**。
+4. **定义行为**：切换到 **GEMINI.md** 选项卡。编写系统提示词（System Prompt）和 Skill 使用说明，然后点击**保存**。
+5. **启动**：点击顶部工具栏的**启动**（Play）按钮，你的新 Agent 就会立即开始运行。
+4. **定义行为**：切换到 **GEMINI.md** 选项卡。编写系统提示词（System Prompt）和 Skill 使用说明，然后点击**保存**。
+    > **提示**：强烈建议在 Agent **处于空闲状态**（没有正在处理任务）或在启动 Session 之前编辑并保存 `GEMINI.md`。这可以确保自动发送的 `/memory reload` 命令能被终端正确处理，而不会干扰 AI 正在进行的思考。
 
 ---
 

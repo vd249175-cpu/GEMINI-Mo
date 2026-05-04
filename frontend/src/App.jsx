@@ -212,14 +212,18 @@ function App() {
 
   // Load Content
   useEffect(() => {
-    if (selectedAgent && selectedSummary?.status === "online") {
+    if (selectedAgent) {
       if (activeTab === "gemini") {
-        agentApi("/gemini").then((res) => setGeminiContent(res.content || "")).catch(() => {});
+        api(`/admin/agents/${selectedAgent}/gemini`).then((res) => {
+          setGeminiContent(res.content || "");
+        }).catch(() => {});
       } else if (activeTab === "card") {
-        agentApi("/card").then((res) => setCardContent(JSON.stringify(res.card || {}, null, 2))).catch(() => {});
+        api(`/admin/agents/${selectedAgent}/card`).then((res) => {
+          setCardContent(JSON.stringify(res.card || {}, null, 2));
+        }).catch(() => {});
       }
     }
-  }, [activeTab, selectedAgent, selectedSummary]);
+  }, [activeTab, selectedAgent]);
 
   const serviceUrl = selectedSummary?.metadata?.service_url;
 
@@ -229,6 +233,14 @@ function App() {
 
     const agentName = selectedAgent;
     let entry = terminalsMap.current[agentName];
+
+    // If entry exists but serviceUrl has changed, or socket is closed, clear it
+    if (entry && (entry.url !== serviceUrl || entry.socket.readyState === WebSocket.CLOSED)) {
+      if (entry.socket) entry.socket.close();
+      if (entry.term) entry.term.dispose();
+      delete terminalsMap.current[agentName];
+      entry = null;
+    }
 
     if (!entry) {
       const term = new XTerm({
@@ -253,7 +265,7 @@ function App() {
         if (socket.readyState === WebSocket.OPEN) socket.send(data);
       });
 
-      entry = { term, fitAddon, socket };
+      entry = { term, fitAddon, socket, url: serviceUrl };
       terminalsMap.current[agentName] = entry;
     }
 
@@ -378,7 +390,7 @@ function App() {
   const saveGemini = async () => {
     setBusy(true);
     try {
-      await agentApi("/gemini", { method: "PUT", body: JSON.stringify({ content: geminiContent }) });
+      await api(`/admin/agents/${selectedAgent}/gemini`, { method: "PUT", body: JSON.stringify({ content: geminiContent }) });
       setStatus("GEMINI.md saved");
     } catch (error) {
       setStatus(`Save failed: ${error.message}`);
@@ -390,7 +402,7 @@ function App() {
     setBusy(true);
     try {
       const card = JSON.parse(cardContent);
-      await agentApi("/card", { method: "PUT", body: JSON.stringify({ card }) });
+      await api(`/admin/agents/${selectedAgent}/card`, { method: "PUT", body: JSON.stringify({ card }) });
       setStatus("AgentCard.json saved");
     } catch (error) {
       setStatus(`Save failed: ${error.message}`);
@@ -417,6 +429,20 @@ function App() {
     const nextSpaces = [...spaces, { id: newId, name, color: "#2563eb", members: [] }];
     api("/admin/communication", { method: "PUT", body: JSON.stringify({ spaces: nextSpaces }) }).then(() => {
       setSelectedSpaceId(newId);
+      refreshAgents();
+    });
+  };
+
+  const deleteSpace = () => {
+    if (!selectedSpace) return;
+    if (selectedSpace.id === "space-default") {
+      alert("Cannot delete default space");
+      return;
+    }
+    if (!confirm(`Delete space "${selectedSpace.name}"?`)) return;
+    
+    api(`/admin/communication/spaces/${selectedSpace.id}`, { method: "DELETE" }).then((data) => {
+      setSelectedSpaceId("space-default");
       refreshAgents();
     });
   };
@@ -563,9 +589,19 @@ function App() {
                     </button>
                   ))}
                 </div>
-                <button className="btn btn-secondary" style={{ width: '100%', height: 32 }} onClick={addSpace}>
-                  <Plus size={16} /> {t("addSpace")}
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-secondary" style={{ flex: 1, height: 32 }} onClick={addSpace}>
+                    <Plus size={16} /> {t("addSpace")}
+                  </button>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ width: 32, height: 32, padding: 0, color: 'var(--accent-red)' }} 
+                    onClick={deleteSpace}
+                    disabled={selectedSpaceId === "space-default"}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
             </div>
           )}

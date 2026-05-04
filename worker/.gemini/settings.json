@@ -1,29 +1,8 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup",
-        "hooks": [
-          {
-            "name": "inject-memory",
-            "type": "command",
-            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/inject_memory.py\"",
-            "description": "Inject GEMINI.md into context once at session start"
-          }
-        ]
-      },
-      {
-        "matcher": "clear",
-        "hooks": [
-          {
-            "name": "inject-memory",
-            "type": "command",
-            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/inject_memory.py\"",
-            "description": "Re-inject GEMINI.md after /clear resets the session"
-          }
-        ]
-      }
-    ]
+    "BeforeAgent": [],
+    "BeforeModel": [],
+    "SessionStart": []
   },
   "context": {
     "includeDirectories": [

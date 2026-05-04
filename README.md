@@ -15,7 +15,7 @@
 
 GEMINI-MO lets you run multiple [Gemini CLI](https://github.com/google-gemini/gemini-cli) agents side by side and **wire them together into a collaborative network**.
 
-Each agent runs in `--yolo` mode with access to MCP tools that allow it to:
+Each agent runs in `--yolo` mode and uses built-in **Skills** to:
 - 📨 **Send messages** to any other online agent by name
 - 📁 **Send files** (as base64 payloads) — automatically written to the recipient's workspace
 - 📬 **Receive messages asynchronously** — queued and delivered when the target comes back online
@@ -49,6 +49,7 @@ Each agent runs in `--yolo` mode with access to MCP tools that allow it to:
 - 🌙 **Dark / Light Theme** — one-click toggle, persisted in localStorage
 - 🌏 **i18n** — English / Chinese UI (default: English)
 - ⚡ **Dynamic Port Allocation** — auto-detects free ports, no manual configuration needed
+- 🛠️ **Customizable Agents** — manually create or edit agent folders with `AgentCard.json` and `GEMINI.md`
 
 ---
 
@@ -75,6 +76,20 @@ start.bat
 
 ---
 
+## Managing Agents
+
+The easiest way to add or customize agents is through the **Visual Console**:
+
+1. **Clone an Agent**: In the "Network" or "Terminal" tab, select an existing agent (like `worker`) and click the **Clone** (Copy) button. 
+2. **Name it**: Enter a new name (e.g., `researcher`). A new folder will be created automatically.
+3. **Customize Identity**: Go to the **AgentCard** tab. Edit the JSON to change the name, description, or avatar info, then click **Save**.
+4. **Define Behavior**: Go to the **GEMINI.md** tab. Write your system prompt and skill instructions here, then click **Save**.
+5. **Start**: Click the **Start** (Play) button in the top bar to launch your new agent.
+
+*Note: You can still manually create folders and files on disk if you prefer. The central server will detect them on refresh.*
+
+---
+
 ## Requirements
 
 | Dependency | Version | Notes |
@@ -82,30 +97,12 @@ start.bat
 | Python | ≥ 3.10 | Managed by `uv` |
 | Node.js | ≥ 18 | For the frontend |
 | [uv](https://github.com/astral-sh/uv) | latest | Auto-installed by `start.sh` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | latest | Install via `npm i -g @google/gemini-cli` |
+4. **Define Behavior**: Go to the **GEMINI.md** tab. Write your system prompt and skill instructions here, then click **Save**. 
+    > **Tip**: It is highly recommended to edit and save `GEMINI.md` while the agent is **idle** (not processing a task) or before starting the session. This ensures that the automatic `/memory reload` command is correctly processed by the terminal without interfering with ongoing AI thoughts.
 
 ---
 
-## Architecture
-
-```
-Browser (React UI)
-      │
-      ▼
-Central Server (FastAPI :8000)
-      │
-      ├── Worker Agent (:5001+)
-      │       └── gemini --yolo  (PTY)
-      │
-      └── Judge Agent  (:5002+)
-              └── gemini --yolo  (PTY)
-```
-
-Each agent runs inside a PTY managed by `agent_host.py`, which exposes a WebSocket terminal and registers itself with the central server on startup.
-
----
-
-## Project Structure
+## 🏗️ Project Structure
 
 ```
 character/

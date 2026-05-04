@@ -36,10 +36,25 @@ next_dynamic_port = 5005
 # Per-agent mailbox: name -> [msg, ...]
 mailboxes: Dict[str, List[Dict[str, Any]]] = {}
 
+import json
+
+SPACES_FILE = Path("spaces.json")
+
+def load_spaces():
+    if SPACES_FILE.exists():
+        try:
+            return json.loads(SPACES_FILE.read_text())
+        except:
+            pass
+    return [
+        {"id": "space-default", "name": "Default Space", "color": "#2563eb", "members": []}
+    ]
+
+def save_spaces():
+    SPACES_FILE.write_text(json.dumps(spaces, indent=2))
+
 # Spaces for Venn-diagram discovery: {id, name, color, members: [name, ...]}
-spaces: List[Dict[str, Any]] = [
-    {"id": "space-default", "name": "Default Space", "color": "#2563eb", "members": []}
-]
+spaces: List[Dict[str, Any]] = load_spaces()
 
 delivered_ids: set = set()
 MAX_HOPS = 4
@@ -154,23 +169,73 @@ async def get_communication():
 async def put_communication(payload: SpaceUpdate):
     global spaces
     spaces = payload.spaces
+    save_spaces()
     return {"communication": {"spaces": spaces}}
 
-@app.get("/admin/monitor")
-async def monitor():
-    # ... (existing monitor code)
-    monitor_agents = []
-    for name, info in agents.items():
-        monitor_agents.append({
-            "agent_name": name,
-            "status": "online",
-            "events": []
-        })
-    return {
-        "agents": monitor_agents,
-        "mailbox_counts": {name: len(msgs) for name, msgs in mailboxes.items()},
-        "recent_mail": []
-    }
+@app.delete("/admin/communication/spaces/{space_id}")
+async def delete_space(space_id: str):
+    global spaces
+    spaces = [s for s in spaces if s["id"] != space_id]
+    save_spaces()
+    return {"status": "deleted", "communication": {"spaces": spaces}}
+
+@app.get("/admin/agents/{agent_name}/gemini")
+async def get_agent_gemini(agent_name: str):
+    agent_path = Path(agent_name)
+    gemini_path = agent_path / "GEMINI.md"
+    if not gemini_path.exists():
+        return {"content": ""}
+    return {"content": gemini_path.read_text()}
+
+@app.put("/admin/agents/{agent_name}/gemini")
+async def put_agent_gemini(agent_name: str, payload: Dict[str, str]):
+    agent_path = Path(agent_name)
+    if not agent_path.exists():
+        raise HTTPException(status_code=404, detail="Agent not found")
+    gemini_path = agent_path / "GEMINI.md"
+    gemini_path.write_text(payload.get("content", ""))
+    
+    # If agent is online, notify it to reload memory via its host
+    if agent_name in agents:
+        info = agents[agent_name]
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.put(f"http://{info['host']}:{info['port']}/gemini", json=payload, timeout=2)
+        except:
+            pass # Ignore if notification fails
+            
+    return {"status": "saved"}
+
+@app.get("/admin/agents/{agent_name}/card")
+async def get_agent_card(agent_name: str):
+    agent_path = Path(agent_name)
+    card_path = agent_path / "AgentCard.json"
+    if not card_path.exists():
+        return {"card": {}}
+    try:
+        return {"card": json.loads(card_path.read_text())}
+    except:
+        return {"card": {}}
+
+@app.put("/admin/agents/{agent_name}/card")
+async def put_agent_card(agent_name: str, payload: Dict[str, Any]):
+    agent_path = Path(agent_name)
+    if not agent_path.exists():
+        raise HTTPException(status_code=404, detail="Agent not found")
+    card_path = agent_path / "AgentCard.json"
+    card_path.write_text(json.dumps(payload.get("card", {}), indent=2, ensure_ascii=False))
+    
+    # Sync with central registry and notify agent host if online
+    if agent_name in agents:
+        agents[agent_name]["card"] = payload.get("card", {})
+        info = agents[agent_name]
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.put(f"http://{info['host']}:{info['port']}/card", json=payload, timeout=2)
+        except:
+            pass
+            
+    return {"status": "saved"}
 
 @app.get("/agent/{agent_name}/peers")
 async def get_agent_peers(agent_name: str):

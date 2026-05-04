@@ -1,0 +1,20 @@
+[
+  {
+    "id": "space-default",
+    "name": "Default Space",
+    "color": "#2563eb",
+    "members": [
+      "judge",
+      "worker"
+    ]
+  },
+  {
+    "id": "space-ojylhwj9",
+    "name": "fa",
+    "color": "#2563eb",
+    "members": [
+      "worker",
+      "worker_copy"
+    ]
+  }
+]
