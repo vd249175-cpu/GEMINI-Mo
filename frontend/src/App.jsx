@@ -141,9 +141,20 @@ function App() {
   const [cardContent, setCardContent] = useState("{}");
 
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [agentPositions, setAgentPositions] = useState({});
+  const [agentPositions, setAgentPositions] = useState(() => {
+    try {
+      const saved = localStorage.getItem("agentPositions");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [dragging, setDragging] = useState(null);
   const [graphGesture, setGraphGesture] = useState(null);
+
+  useEffect(() => {
+    localStorage.setItem("agentPositions", JSON.stringify(agentPositions));
+  }, [agentPositions]);
 
   const terminalContainerRef = useRef(null);
   const terminalsMap = useRef({});
@@ -352,6 +363,11 @@ function App() {
     try {
       await api(`/admin/agents/${agentName}`, { method: "DELETE" });
       if (selectedAgent === agentName) setSelectedAgent("");
+      setAgentPositions(prev => {
+        const next = { ...prev };
+        delete next[agentName];
+        return next;
+      });
       refreshAgents();
     } catch (error) {
       alert(error.message);
