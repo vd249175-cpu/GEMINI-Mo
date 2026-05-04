@@ -31,21 +31,7 @@ npm install
 cd ..
 
 echo "=========================================="
-echo "    Starting Services..."
+echo "    Starting Services with start_all.sh..."
 echo "=========================================="
 
-# 4. Start backend
-echo "[-] Starting central server (backend)..."
-uv run central_server.py &
-BACKEND_PID=$!
-
-# 5. Start frontend
-echo "[-] Starting frontend server..."
-cd frontend
-npm run dev &
-FRONTEND_PID=$!
-
-# Wait for both processes and handle shutdown
-trap "echo 'Shutting down services...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit" SIGINT SIGTERM EXIT
-
-wait
+./start_all.sh

@@ -35,7 +35,15 @@ echo ==========================================
 
 :: Start backend in a new window
 echo [-] Starting central server (backend)...
-start "Central Server (Backend)" cmd /c "uv run central_server.py"
+start "Central Server (Backend)" cmd /c "uv run python central_server.py"
+
+:: Start Worker Agent
+echo [-] Starting Worker Agent...
+start "Worker Agent" cmd /c "uv run python agent_host.py 5001 ./worker"
+
+:: Start Judge Agent
+echo [-] Starting Judge Agent...
+start "Judge Agent" cmd /c "uv run python agent_host.py 5002 ./judge"
 
 :: Start frontend in a new window
 echo [-] Starting frontend server...
