@@ -31,6 +31,7 @@
 - 🕸️ **Visual Network Graph** — drag-and-drop layout, persistent positions, real-time connection lines colored by space
 - 🖥️ **Embedded Terminal** — full xterm.js terminal wired to each agent's PTY, with truecolor support
 - 🤖 **Multi-Agent Management** — start, stop, clone and delete agents from the UI
+- 💬 **Agent-to-Agent Messaging** — Gemini CLI agents can send messages and files directly to each other via the central server, enabling real collaborative workflows
 - 🌐 **Communication Spaces** — group agents into named spaces to control which agents can communicate
 - 🌙 **Dark / Light Theme** — one-click toggle, persisted in localStorage
 - 🌏 **i18n** — English / Chinese UI (default: English)
@@ -91,6 +92,19 @@ character/
     ├── logo.png
     └── screenshots/
 ```
+
+---
+
+## Agent Communication
+
+One of the core features of GEMINI-MO is enabling **Gemini CLI agents to communicate with each other autonomously**.
+
+Each agent runs with `--yolo` mode and has access to MCP tools that let it:
+- 📨 **Send messages** to any other online agent by name
+- 📁 **Send files** (as base64 payloads) to other agents, which are written to the recipient's workspace
+- 📬 **Receive messages** asynchronously — if the target agent is offline, the message is queued and delivered when it comes back online
+
+This means you can ask a `worker` agent to complete a task and automatically forward its output to a `judge` agent for review — all without any manual copy-paste.
 
 ---
 
