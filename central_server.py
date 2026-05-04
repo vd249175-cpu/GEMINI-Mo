@@ -99,11 +99,6 @@ async def register(payload: RegisterPayload):
             asyncio.create_task(_deliver_to_agent(name, msg))
         mailboxes[name].clear()
     
-    # Auto-add to default space if new
-    in_any = any(name in s["members"] for s in spaces)
-    if not in_any:
-        spaces[0]["members"].append(name)
-        
     print(f"[Central] 📝 Registered: {name} @ {payload.host}:{payload.port}")
     return {"status": "ok", "agents": list(agents.keys())}
 
