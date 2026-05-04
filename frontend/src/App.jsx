@@ -21,7 +21,9 @@ import {
   User,
   Settings,
   ChevronRight,
-  Monitor
+  Monitor,
+  Moon,
+  Sun
 } from "lucide-react";
 import { Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
@@ -117,6 +119,12 @@ function App() {
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
   const [activeTab, setActiveTab] = useState("graph");
   const [lang, setLang] = useState(localStorage.getItem("lang") || "en");
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
+  
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
   
   const t = (key, params) => {
     let str = i18n[lang][key] || key;
@@ -432,6 +440,9 @@ function App() {
             <div className="topbar-subtitle">{selectedSummary?.metadata?.service_url || "No service URL"}</div>
           </div>
           <div className="topbar-actions">
+            <button className="btn btn-secondary" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} title="Toggle Theme">
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
             <button className="btn btn-secondary" onClick={() => setLang(lang === 'en' ? 'zh' : 'en')} style={{ fontWeight: 600 }}>
               {t("langSwitch")}
             </button>
