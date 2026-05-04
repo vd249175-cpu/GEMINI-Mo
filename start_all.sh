@@ -9,17 +9,31 @@ mkdir -p "$LOG_DIR"
 
 echo "🔄 Restarting Long River Agent System (v2 - Silent Mode)..."
 
-# 1. 清理现有进程
-PORTS=(8000 5001 5002 5173)
-for PORT in "${PORTS[@]}"; do
-    PIDS=$(lsof -ti:$PORT)
-    if [ ! -z "$PIDS" ]; then
-        echo "  - Cleaning up port $PORT..."
-        for PID in $PIDS; do
-            kill -9 $PID 2>/dev/null
-        done
-    fi
-done
+# 端口检测函数，自动寻找空闲端口
+get_free_port() {
+    local port=$1
+    while lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; do
+        port=$((port+1))
+    done
+    echo $port
+}
+
+# 分配端口
+CENTRAL_PORT=$(get_free_port 8000)
+WORKER_PORT=$(get_free_port 5001)
+JUDGE_PORT=$(get_free_port 5002)
+FRONTEND_PORT=$(get_free_port 5173)
+
+echo "🎯 Assigned Ports:"
+echo "  - Central:  $CENTRAL_PORT"
+echo "  - Worker:   $WORKER_PORT"
+echo "  - Judge:    $JUDGE_PORT"
+echo "  - Frontend: $FRONTEND_PORT"
+
+# 导出环境变量
+export PORT=$CENTRAL_PORT
+export CENTRAL_SERVER_URL="http://127.0.0.1:$CENTRAL_PORT"
+export VITE_CENTRAL_URL=$CENTRAL_SERVER_URL
 
 # 定义退出时的清理函数
 cleanup() {
@@ -35,24 +49,24 @@ trap cleanup SIGINT SIGTERM
 echo "🚀 Starting services in background..."
 
 # 1. 启动中央服务器
-uv run python central_server.py > "$LOG_DIR/central.log" 2>&1 &
-echo "  - [8000] Central Server (Log: logs/central.log)"
+PORT=$CENTRAL_PORT uv run python central_server.py > "$LOG_DIR/central.log" 2>&1 &
+echo "  - [$CENTRAL_PORT] Central Server (Log: logs/central.log)"
 sleep 2
 
 # 2. 启动 Worker Agent
-uv run python agent_host.py 5001 ./worker > "$LOG_DIR/worker.log" 2>&1 &
-echo "  - [5001] Worker Agent   (Log: logs/worker.log)"
+CENTRAL_SERVER_URL=$CENTRAL_SERVER_URL uv run python agent_host.py $WORKER_PORT ./worker > "$LOG_DIR/worker.log" 2>&1 &
+echo "  - [$WORKER_PORT] Worker Agent   (Log: logs/worker.log)"
 
 # 3. 启动 Judge Agent
-uv run python agent_host.py 5002 ./judge > "$LOG_DIR/judge.log" 2>&1 &
-echo "  - [5002] Judge Agent    (Log: logs/judge.log)"
+CENTRAL_SERVER_URL=$CENTRAL_SERVER_URL uv run python agent_host.py $JUDGE_PORT ./judge > "$LOG_DIR/judge.log" 2>&1 &
+echo "  - [$JUDGE_PORT] Judge Agent    (Log: logs/judge.log)"
 
 # 4. 启动前端
-(cd frontend && npm run dev) > "$LOG_DIR/frontend.log" 2>&1 &
-echo "  - [5173] Frontend UI    (Log: logs/frontend.log)"
+(cd frontend && npm run dev -- --port $FRONTEND_PORT) > "$LOG_DIR/frontend.log" 2>&1 &
+echo "  - [$FRONTEND_PORT] Frontend UI    (Log: logs/frontend.log)"
 
 echo -e "\n✅ All services are running."
-echo "👉 Open: http://localhost:5173"
+echo "👉 Open: http://localhost:$FRONTEND_PORT"
 echo "💡 Use the Terminal tab in the Web UI to interact with agents."
 echo "按下 Ctrl+C 可停止所有服务。"
 

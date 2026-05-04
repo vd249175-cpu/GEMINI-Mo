@@ -119,7 +119,8 @@ function agentPosition(agent, index, positions) {
 }
 
 function App() {
-  const [baseUrl, setBaseUrl] = useState(localStorage.getItem("centralUrl") || "http://127.0.0.1:8000");
+  const defaultUrl = (typeof import.meta.env !== 'undefined' && import.meta.env.VITE_CENTRAL_URL) ? import.meta.env.VITE_CENTRAL_URL : "http://127.0.0.1:8000";
+  const [baseUrl, setBaseUrl] = useState(localStorage.getItem("centralUrl") || defaultUrl);
   const [agents, setAgents] = useState([]);
   const [communication, setCommunication] = useState({ spaces: [] });
   const [agentPositions, setAgentPositions] = useState({});
