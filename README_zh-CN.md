@@ -3,11 +3,24 @@
 </p>
 
 <h1 align="center">GEMINI-MO</h1>
-<p align="center">可视化多智能体控制台，用于编排 Gemini CLI 代理</p>
+<p align="center">可视化多智能体控制台 — 让你的 Gemini CLI Agent 互相发消息、传文件、自主协作</p>
 
 <p align="center">
   <a href="README.md">English</a> | 中文
 </p>
+
+---
+
+## 这是什么？
+
+GEMINI-MO 让你同时运行多个 [Gemini CLI](https://github.com/google-gemini/gemini-cli) Agent，并**将它们串联成一个可协作的网络**。
+
+每个 Agent 以 `--yolo` 模式运行，并通过 MCP 工具获得以下能力：
+- 📨 **发送消息** — 按名称向任意在线 Agent 发送文本消息
+- 📁 **发送文件** — 以 base64 格式将文件传递给其他 Agent，自动写入对方工作目录
+- 📬 **异步接收** — 目标 Agent 离线时消息缓存，上线后立即投递
+
+> **示例：** 让 `worker` Agent 编写代码，完成后自动将结果转发给 `judge` Agent 审核 —— 零手动拷贝、零人工传递。
 
 ---
 
@@ -28,10 +41,10 @@
 
 ## 功能亮点
 
+- 💬 **Agent 间通讯** — 通过中央服务器直接发消息和文件，实现真正的多智能体协作
 - 🕸️ **可视化网络图谱** — 拖拽布局，位置持久化，连线按空间高亮着色
 - 🖥️ **嵌入式终端** — 每个 Agent 独享 xterm.js 终端，完整 PTY 支持，真彩色渲染
 - 🤖 **多智能体管理** — 通过 UI 直接启动、停止、克隆和删除 Agent
-- 💬 **Agent 间通讯** — Gemini CLI Agent 可以通过中央服务器直接向其他 Agent 发送消息和文件，实现真正的多智能体协作工作流
 - 🌐 **通讯空间** — 将 Agent 分组，精准管控它们之间的通讯范围
 - 🌙 **暗色 / 亮色主题** — 一键切换，记住你的偏好
 - 🌏 **国际化** — 英文 / 中文界面（默认英文）
@@ -73,6 +86,25 @@ start.bat
 
 ---
 
+## 架构说明
+
+```
+浏览器 (React UI)
+      │
+      ▼
+中央服务器 (FastAPI :8000)
+      │
+      ├── Worker Agent (:5001+)
+      │       └── gemini --yolo  (PTY)
+      │
+      └── Judge Agent  (:5002+)
+              └── gemini --yolo  (PTY)
+```
+
+每个 Agent 通过 `agent_host.py` 运行在 PTY 内，暴露 WebSocket 终端，并在启动时自动向中央服务器注册。
+
+---
+
 ## 项目结构
 
 ```
@@ -92,35 +124,3 @@ character/
     ├── logo.png
     └── screenshots/
 ```
-
----
-
-## Agent 间通讯机制
-
-GEMINI-MO 的核心能力之一，是让**各个 Gemini CLI Agent 能够自主地互相通讯**。
-
-每个 Agent 以 `--yolo` 模式运行，并通过 MCP 工具获得以下能力：
-- 📨 **发送消息** — 可以按名称向任意在线 Agent 发送文本消息
-- 📁 **发送文件** — 以 base64 格式将文件发送给其他 Agent，文件会自动写入对方的工作目录
-- 📬 **异步接收** — 如果目标 Agent 当前离线，消息会被中央服务器缓存，等 Agent 上线后立即投递
-
-这意味着你可以让 `worker` Agent 完成一项任务，并自动将结果转发给 `judge` Agent 进行审核 —— 完全无需人工介入复制粘贴。
-
----
-
-## 架构说明
-
-```
-浏览器 (React UI)
-      │
-      ▼
-中央服务器 (FastAPI :8000)
-      │
-      ├── Worker Agent (:5001+)
-      │       └── gemini --yolo  (PTY)
-      │
-      └── Judge Agent  (:5002+)
-              └── gemini --yolo  (PTY)
-```
-
-每个 Agent 通过 `agent_host.py` 运行在 PTY 内，暴露 WebSocket 终端，并在启动时自动向中央服务器注册。
