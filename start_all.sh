@@ -13,7 +13,7 @@ echo "🔄 Restarting Long River Agent System (v2 - Silent Mode)..."
 get_free_port() {
     local port=$1
     while lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; do
-        port=$((port+1))
+        port=$((port+98))
     done
     echo $port
 }
