@@ -5,42 +5,21 @@
         "matcher": "startup",
         "hooks": [
           {
-            "name": "auto-trust-workspace",
+            "name": "inject-memory",
             "type": "command",
-            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/auto_trust_workspace.py\"",
-            "description": "Automatically trust parent directory and add workspace directory"
+            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/inject_memory.py\"",
+            "description": "Inject GEMINI.md into context once at session start"
           }
         ]
-      }
-    ],
-    "BeforeModel": [
+      },
       {
-        "matcher": "*",
+        "matcher": "clear",
         "hooks": [
           {
-            "name": "refresh-memory",
+            "name": "inject-memory",
             "type": "command",
-            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/refresh_memory.py\"",
-            "description": "Automatically inject GEMINI.md content before each turn"
-          },
-          {
-            "name": "check-inbox",
-            "type": "command",
-            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/check_inbox.py\"",
-            "description": "Automatically check for messages from the central server"
-          }
-        ]
-      }
-    ],
-    "AfterAgent": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "name": "notify-peer",
-            "type": "command",
-            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/notify_peer.py\"",
-            "description": "Automatically send response to peer agent"
+            "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/inject_memory.py\"",
+            "description": "Re-inject GEMINI.md after /clear resets the session"
           }
         ]
       }
