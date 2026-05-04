@@ -69,6 +69,8 @@ async def get_card():
 async def put_card(payload: CardPayload):
     card_path = PROJECT_DIR / "AgentCard.json"
     card_path.write_text(json.dumps(payload.card, indent=2, ensure_ascii=False))
+    # Sync the new card immediately to the central server
+    asyncio.create_task(register_with_central(PROJECT_DIR.name, PORT))
     return {"status": "saved"}
 
 def set_winsize(fd, row, col, xpix=0, ypix=0):
@@ -283,9 +285,10 @@ async def get_card():
     return {"card": json.loads(card_path.read_text())}
 
 @app.put("/admin/agents/{agent_name}/card")
-async def put_card(payload: dict):
+async def put_card_admin(agent_name: str, payload: dict):
     card_path = PROJECT_DIR / "AgentCard.json"
     card_path.write_text(json.dumps(payload, indent=2))
+    asyncio.create_task(register_with_central(PROJECT_DIR.name, PORT))
     return {"status": "saved"}
 
 if __name__ == "__main__":

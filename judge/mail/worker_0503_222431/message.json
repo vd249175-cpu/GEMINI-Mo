@@ -1,6 +1,0 @@
-{
-  "from": "worker",
-  "content": "Message received. Communication test successful. This is Worker replying.",
-  "timestamp": "2026-05-04T04:24:31.799681Z",
-  "message_id": "bb63d6d95418"
-}

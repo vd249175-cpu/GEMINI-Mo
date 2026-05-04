@@ -1,6 +1,0 @@
-{
-  "from": "User",
-  "content": "USE THE TOOL send_message: --to worker --content \"Test message with file\" --files /Users/apexwave/Desktop/play/character/central_server.py",
-  "timestamp": "2026-05-03T16:27:52.646638+00:00Z",
-  "message_id": "test-cmd-002"
-}

@@ -299,6 +299,20 @@ async def stop_agent(agent_name: str):
         
     return {"status": "stopped", "agent_name": agent_name}
 
+@app.delete("/admin/agents/{agent_name}")
+async def delete_agent(agent_name: str):
+    if agent_name in processes:
+        await stop_agent(agent_name)
+    
+    agent_path = Path(agent_name)
+    if agent_path.exists() and agent_path.is_dir():
+        import shutil
+        # Use to_thread to avoid blocking event loop
+        await asyncio.to_thread(shutil.rmtree, agent_path)
+        print(f"[Central] 🗑️ Deleted agent {agent_name}")
+    
+    return {"status": "deleted", "agent_name": agent_name}
+
 import shutil
 
 @app.post("/admin/agents/create")
@@ -320,10 +334,11 @@ async def create_agent(payload: CreateAgentPayload):
             shutil.rmtree(new_path)
             
         def ignore_patterns(path, names):
-            return {n for n in names if n in {".git", "__pycache__", "mail", "checkpoint", "logs", "node_modules"}}
+            return {n for n in names if n in {".git", "__pycache__", "mail", "checkpoint", "logs", "node_modules", ".venv", ".DS_Store", "workspace", "handswriter-image-gen"}}
 
         # Perform copy directly from central server (which is in the root)
-        shutil.copytree(source_path, new_path, ignore=ignore_patterns)
+        # Use asyncio.to_thread to avoid blocking the event loop
+        await asyncio.to_thread(shutil.copytree, source_path, new_path, ignore=ignore_patterns)
         
         print(f"[Central] 👯 Cloned {source} -> {new_name}")
         return {"status": "cloned", "new_name": new_name, "path": str(new_path)}

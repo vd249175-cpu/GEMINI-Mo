@@ -1,6 +1,0 @@
-{
-  "from": "User",
-  "content": "请通过 send_message 向 worker 发送一条消息，内容为 \"Hello Worker\"，并带上文件 /Users/apexwave/Desktop/play/character/central_server.py",
-  "timestamp": "2026-05-03T16:27:35.061159+00:00Z",
-  "message_id": "test-cmd-001"
-}

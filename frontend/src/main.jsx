@@ -24,6 +24,69 @@ import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
 import "./styles.css";
 
+const i18n = {
+  en: {
+    title: "Character Console",
+    online: "online",
+    offline: "offline",
+    centralServer: "Central Server",
+    agents: "Agents",
+    selectAgent: "Select an Agent",
+    start: "Start",
+    stop: "Stop",
+    clone: "Clone",
+    delete: "Delete",
+    network: "Network",
+    terminal: "Terminal",
+    spaces: "Spaces",
+    addSpace: "Add Space",
+    cloneHint: "Alt + Drag an agent to clone it. Agents in the same space connect automatically.",
+    working: "Working...",
+    ready: "Ready",
+    connected: "Connected",
+    saveGemini: "Save GEMINI.md",
+    saveCard: "Save AgentCard",
+    editGemini: "Edit GEMINI.md here...",
+    editCard: "Edit AgentCard.json here...",
+    newSpacePrompt: "New space name:",
+    clonePrompt: "Enter name for the cloned agent:",
+    cloneSuccess: "Cloned successfully",
+    deleteConfirm: "Are you sure you want to delete {agent}? This cannot be undone.",
+    actionFailed: "Action failed:",
+    langSwitch: "中/EN"
+  },
+  zh: {
+    title: "角色控制台",
+    online: "在线",
+    offline: "离线",
+    centralServer: "中央服务器",
+    agents: "智能体列表",
+    selectAgent: "请选择一个智能体",
+    start: "启动",
+    stop: "停止",
+    clone: "克隆",
+    delete: "删除",
+    network: "网络拓扑",
+    terminal: "终端",
+    spaces: "通讯空间",
+    addSpace: "添加空间",
+    cloneHint: "按住 Alt 拖拽以克隆。属于同空间的智能体会互相连接。",
+    working: "处理中...",
+    ready: "就绪",
+    connected: "已连接",
+    saveGemini: "保存 GEMINI.md",
+    saveCard: "保存 AgentCard",
+    editGemini: "在此处编辑 GEMINI.md...",
+    editCard: "在此处编辑 AgentCard.json...",
+    newSpacePrompt: "新空间名称：",
+    clonePrompt: "请输入克隆出的 Agent 名称：",
+    cloneSuccess: "克隆成功",
+    deleteConfirm: "确定要删除 {agent} 吗？此操作不可逆。",
+    actionFailed: "操作失败:",
+    langSwitch: "中/EN"
+  }
+};
+
 function shortId(prefix = "") {
   return `${prefix}${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -63,7 +126,17 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState("");
   const [selectedSpaceId, setSelectedSpaceId] = useState("");
   const [activeTab, setActiveTab] = useState("graph");
-  const [status, setStatus] = useState("Ready");
+  const [lang, setLang] = useState(localStorage.getItem("lang") || "zh");
+  
+  const t = (key, params) => {
+    let str = i18n[lang][key] || key;
+    if (params) {
+      Object.keys(params).forEach((k) => (str = str.replace(`{${k}}`, params[k])));
+    }
+    return str;
+  };
+
+  const [status, setStatus] = useState(t("ready"));
   const [online, setOnline] = useState(false);
   const [busy, setBusy] = useState(false);
   const [geminiContent, setGeminiContent] = useState("");
@@ -113,19 +186,20 @@ function App() {
       setAgents(result.agents || []);
       setCommunication(result.communication || { spaces: [] });
       setOnline(true);
-      setStatus("Connected");
+      setStatus(t("connected"));
     } catch (error) {
       setOnline(false);
-      setStatus(`Connection failed: ${error.message}`);
+      setStatus(`${t("actionFailed")} ${error.message}`);
     }
   };
 
   useEffect(() => {
     localStorage.setItem("centralUrl", baseUrl);
+    localStorage.setItem("lang", lang);
     refreshAgents();
     const timer = setInterval(refreshAgents, 3000);
     return () => clearInterval(timer);
-  }, [baseUrl]);
+  }, [baseUrl, lang]);
 
   // Terminal logic with persistence
   useEffect(() => {
@@ -312,10 +386,10 @@ function App() {
 
   const finishGesture = async (event) => {
     if (cloning) {
-      const newName = prompt("Enter name for the cloned agent:", `${cloning.sourceName}_copy`);
+      const newName = prompt(t("clonePrompt"), `${cloning.sourceName}_copy`);
       if (newName) {
         setBusy(true);
-        setStatus(`Cloning ${cloning.sourceName}...`);
+        setStatus(`${t("clone")} ${cloning.sourceName}...`);
         try {
           await api("/admin/agents/create", {
             method: "POST",
@@ -324,9 +398,9 @@ function App() {
           const graph = screenToGraph(graphPoint(event));
           setAgentPositions((prev) => ({ ...prev, [newName]: { x: graph.x, y: graph.y } }));
           refreshAgents();
-          setStatus("Cloned successfully");
+          setStatus(t("cloneSuccess"));
         } catch (error) {
-          setStatus(`Clone failed: ${error.message}`);
+          setStatus(`${t("actionFailed")} ${error.message}`);
         }
         setBusy(false);
       }
@@ -349,7 +423,7 @@ function App() {
   };
 
   const addSpace = () => {
-    const name = prompt("New space name:");
+    const name = prompt(t("newSpacePrompt"));
     if (!name) return;
     const nextSpaces = [...spaces, { id: shortId("space-"), name, color: "#2563eb", members: [] }];
     api("/admin/communication", { method: "PUT", body: JSON.stringify({ spaces: nextSpaces }) }).then(refreshAgents);
@@ -363,28 +437,43 @@ function App() {
     try {
       await api(`/admin/agents/${agent.agent_name}/${action}`, { method: "POST" });
       await refreshAgents();
-      setStatus(`${agent.agent_name} ${action === "start" ? "started" : "stopped"}`);
+      setStatus(`${agent.agent_name} ${action}`);
     } catch (error) {
-      setStatus(`Action failed: ${error.message}`);
+      setStatus(`${t("actionFailed")} ${error.message}`);
     }
     setBusy(false);
   };
 
   const handleClone = async (sourceName) => {
-    const newName = prompt("Enter name for the cloned agent:", `${sourceName}_copy`);
+    const newName = prompt(t("clonePrompt"), `${sourceName}_copy`);
     if (!newName) return;
     
     setBusy(true);
-    setStatus(`Cloning ${sourceName}...`);
+    setStatus(`${t("clone")} ${sourceName}...`);
     try {
       await api("/admin/agents/create", {
         method: "POST",
         body: JSON.stringify({ agent_name: newName, source_agent: sourceName }),
       });
       await refreshAgents();
-      setStatus(`Cloned ${sourceName} to ${newName}`);
+      setStatus(t("cloneSuccess"));
     } catch (error) {
-      setStatus(`Clone failed: ${error.message}`);
+      setStatus(`${t("actionFailed")} ${error.message}`);
+    }
+    setBusy(false);
+  };
+
+  const handleDelete = async (agentName) => {
+    if (!confirm(t("deleteConfirm", { agent: agentName }))) return;
+    setBusy(true);
+    setStatus(`${t("delete")} ${agentName}...`);
+    try {
+      await api(`/admin/agents/${agentName}`, { method: "DELETE" });
+      await refreshAgents();
+      if (selectedAgent === agentName) setSelectedAgent("");
+      setStatus(t("deleteSuccess"));
+    } catch (error) {
+      setStatus(`${t("actionFailed")} ${error.message}`);
     }
     setBusy(false);
   };
@@ -395,22 +484,22 @@ function App() {
         <header className="brand">
           <div>
             <h1>Long River</h1>
-            <p>Character Console</p>
+            <p>{t("title")}</p>
           </div>
           <span className={online ? "status online" : "status offline"}>
             {online ? <CheckCircle2 size={16} /> : <TriangleAlert size={16} />}
-            {online ? "online" : "offline"}
+            {online ? t("online") : t("offline")}
           </span>
         </header>
 
-        <label>Central Server</label>
+        <label>{t("centralServer")}</label>
         <div className="inline-row">
           <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
           <button className="icon-button" onClick={refreshAgents}><RefreshCw size={18} /></button>
         </div>
 
         <div className="agent-list">
-          <label>Agents</label>
+          <label>{t("agents")}</label>
           {agents.map((agent, index) => {
             const pos = agentPosition(agent, index, agentPositions);
             return (
@@ -421,17 +510,17 @@ function App() {
               >
                 <span><strong>{agent.agent_name}</strong></span>
                 <div className="inline-row">
-                  <span className={`agent-state ${agent.status}`}>{agent.status}</span>
+                  <span className={`agent-state ${agent.status}`}>{agent.status === "online" ? t("online") : t("offline")}</span>
                   <button 
                     className="icon-button secondary" 
-                    title={agent.status === "online" ? "Stop Agent" : "Start Agent"}
+                    title={agent.status === "online" ? t("stop") : t("start")}
                     onClick={(e) => { e.stopPropagation(); handleToggleService(agent); }}
                   >
                     {agent.status === "online" ? <Square size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
                   </button>
                   <button 
                     className="icon-button secondary" 
-                    title="Clone Agent"
+                    title={t("clone")}
                     onClick={(e) => { e.stopPropagation(); handleClone(agent.agent_name); }}
                   >
                     <Copy size={14} />
@@ -447,32 +536,34 @@ function App() {
         <header className="topbar">
           <div>
             <p>{selectedSummary?.metadata?.service_url || status}</p>
-            <h2>{selectedAgent || "Select an Agent"}</h2>
+            <h2>{selectedAgent || t("selectAgent")}</h2>
           </div>
           <div className="actions">
+            <button className="secondary" onClick={() => setLang(lang === "en" ? "zh" : "en")}>
+              {t("langSwitch")}
+            </button>
             <button 
               className={selectedSummary?.status === "online" ? "danger" : "success"}
               disabled={!selectedAgent || busy}
               onClick={() => handleToggleService(selectedSummary)}
             >
               {selectedSummary?.status === "online" ? <Square size={16} /> : <Play size={16} />}
-              {selectedSummary?.status === "online" ? "Stop" : "Start"}
+              {selectedSummary?.status === "online" ? t("stop") : t("start")}
             </button>
             <button 
               className="secondary" 
               disabled={!selectedAgent || busy}
               onClick={() => handleClone(selectedAgent)}
             >
-              <Copy size={16} /> Clone
+              <Copy size={16} /> {t("clone")}
             </button>
-            <button className="secondary" onClick={() => alert("Check start_all.sh to start new agents.")}><Plus size={16} /> Start</button>
-            <button className="danger" disabled={!selectedAgent}><Trash2 size={16} /> Delete</button>
+            <button className="danger" disabled={!selectedAgent || busy} onClick={() => handleDelete(selectedAgent)}><Trash2 size={16} /> {t("delete")}</button>
           </div>
         </header>
 
         <nav className="tabs">
-          <button className={activeTab === "graph" ? "active" : ""} onClick={() => setActiveTab("graph")}><Network size={16} /> Network</button>
-          <button className={activeTab === "terminal" ? "active" : ""} onClick={() => setActiveTab("terminal")}><TerminalIcon size={16} /> Terminal</button>
+          <button className={activeTab === "graph" ? "active" : ""} onClick={() => setActiveTab("graph")}><Network size={16} /> {t("network")}</button>
+          <button className={activeTab === "terminal" ? "active" : ""} onClick={() => setActiveTab("terminal")}><TerminalIcon size={16} /> {t("terminal")}</button>
           <button className={activeTab === "gemini" ? "active" : ""} onClick={() => setActiveTab("gemini")}><FileText size={16} /> GEMINI.md</button>
           <button className={activeTab === "card" ? "active" : ""} onClick={() => setActiveTab("card")}><Bot size={16} /> AgentCard</button>
         </nav>
@@ -506,7 +597,7 @@ function App() {
                       onPointerDown={(e) => startDrag(e, agent.agent_name, pos)}
                     >
                       <strong>{agent.agent_name}</strong>
-                      <span>{agent.status}</span>
+                      <span>{agent.status === "online" ? t("online") : t("offline")}</span>
                       <small>{(agent.communication_spaces || []).join(", ")}</small>
                     </div>
                   );
@@ -519,8 +610,8 @@ function App() {
               </div>
             </div>
             <aside className="space-panel">
-              <h3>Spaces</h3>
-              <button onClick={addSpace}><Plus size={16} /> Add Space</button>
+              <h3>{t("spaces")}</h3>
+              <button onClick={addSpace}><Plus size={16} /> {t("addSpace")}</button>
               <select value={selectedSpaceId} onChange={(e) => setSelectedSpaceId(e.target.value)}>
                 {spaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
@@ -535,7 +626,7 @@ function App() {
                   </button>
                 ))}
               </div>
-              <p className="note">Alt + Drag an agent to clone it. Agents in the same space connect automatically.</p>
+              <p className="note">{t("cloneHint")}</p>
             </aside>
           </section>
         )}
@@ -552,9 +643,9 @@ function App() {
               className="gemini-editor"
               value={geminiContent}
               onChange={(e) => setGeminiContent(e.target.value)}
-              placeholder="Edit GEMINI.md here..."
+              placeholder={t("editGemini")}
             />
-            <button onClick={saveGemini} disabled={busy}><Save size={16} /> Save GEMINI.md</button>
+            <button onClick={saveGemini} disabled={busy}><Save size={16} /> {t("saveGemini")}</button>
           </section>
         )}
 
@@ -564,14 +655,14 @@ function App() {
               className="gemini-editor"
               value={cardContent}
               onChange={(e) => setCardContent(e.target.value)}
-              placeholder="Edit AgentCard.json here..."
+              placeholder={t("editCard")}
             />
-            <button onClick={saveCard} disabled={busy}><Save size={16} /> Save AgentCard.json</button>
+            <button onClick={saveCard} disabled={busy}><Save size={16} /> {t("saveCard")}</button>
           </section>
         )}
 
         <footer className="footer">
-          <span>{busy ? "Working..." : status}</span>
+          <span>{busy ? t("working") : status}</span>
         </footer>
       </main>
     </div>
