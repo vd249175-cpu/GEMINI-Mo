@@ -5,7 +5,8 @@
     "color": "#2563eb",
     "members": [
       "judge",
-      "worker"
+      "worker",
+      "worker_copy"
     ]
   },
   {
@@ -13,8 +14,7 @@
     "name": "fa",
     "color": "#2563eb",
     "members": [
-      "worker",
-      "worker_copy"
+      "worker"
     ]
   }
 ]

@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "BeforeAgent": [],
+    "BeforeModel": [],
+    "SessionStart": []
+  },
+  "context": {
+    "includeDirectories": [
+      ".."
+    ]
+  }
+}
