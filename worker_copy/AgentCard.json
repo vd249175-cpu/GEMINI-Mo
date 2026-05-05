@@ -1,9 +1,0 @@
-{
-  "name": "Worker_copy Agent",
-  "description": "Generates cinematic character images using ComfyUI.",
-  "capabilities": [
-    "image-generation",
-    "comfyui-workflow"
-  ],
-  "owner": "apexwave"
-}

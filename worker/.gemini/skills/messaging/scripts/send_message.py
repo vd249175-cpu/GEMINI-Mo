@@ -48,33 +48,36 @@ def main():
             )
         )
 
-    msg_id = uuid.uuid4().hex[:12]
-    payload = {
-        "message_id": msg_id,
-        "from": my_name,
-        "to": args.to,
-        "content": args.content,
-        "files": resolved_files,
-        "hops": 0,
-    }
+    # Support multiple recipients (comma-separated or list-like string)
+    targets = [t.strip() for t in args.to.replace("[", "").replace("]", "").split(",") if t.strip()]
 
-    log(f"Sending from '{my_name}' to '{args.to}' (msg_id={msg_id}) with {len(resolved_files)} files via {central_url}")
+    for target in targets:
+        msg_id = uuid.uuid4().hex[:12]
+        payload = {
+            "message_id": msg_id,
+            "from": my_name,
+            "to": target,
+            "content": args.content,
+            "files": resolved_files,
+            "hops": 0,
+        }
 
-    try:
-        req = urllib.request.Request(
-            f"{central_url}/send",
-            data=json.dumps(payload, ensure_ascii=False).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            result = json.loads(resp.read().decode())
-            status = result.get("status", "unknown")
-            print(f"✅ Message sent to '{args.to}'. Status: {status} (msg_id={msg_id})")
-    except Exception as e:
-        log(f"Error sending message: {e}")
-        print(f"❌ Failed to send message: {e}")
-        sys.exit(1)
+        log(f"Sending from '{my_name}' to '{target}' (msg_id={msg_id}) with {len(resolved_files)} files via {central_url}")
+
+        try:
+            req = urllib.request.Request(
+                f"{central_url}/send",
+                data=json.dumps(payload, ensure_ascii=False).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                result = json.loads(resp.read().decode())
+                status = result.get("status", "unknown")
+                print(f"✅ Message sent to '{target}'. Status: {status} (msg_id={msg_id})")
+        except Exception as e:
+            log(f"Error sending message to '{target}': {e}")
+            # Continue to next target even if one fails
 
 
 if __name__ == "__main__":

@@ -129,12 +129,38 @@ def _get_disk_agent_names() -> List[str]:
                     discovered_names.append(path.name)
     return discovered_names
 
+async def _sync_agents_with_disk():
+    """Proactively kill processes and remove space entries for agents whose directories are gone."""
+    disk_names = set(_get_disk_agent_names())
+    
+    # 1. Kill and unregister agents that are "online" but folder is deleted
+    online_names = list(agents.keys())
+    for name in online_names:
+        if name not in disk_names:
+            print(f"[Central] 🕵️ Proactive Sync: Agent '{name}' directory is missing. Stopping...")
+            await stop_agent(name)
+
+    # 2. Scrub spaces of any members that neither exist on disk nor are currently online
+    global spaces
+    modified = False
+    active_pool = disk_names | set(agents.keys())
+    for space in spaces:
+        original_count = len(space["members"])
+        space["members"] = [m for m in space["members"] if m in active_pool]
+        if len(space["members"]) != original_count:
+            modified = True
+    
+    if modified:
+        save_spaces()
+        print(f"[Central] 🧹 Proactive Sync: Cleaned up missing members from communication spaces")
+
 @app.get("/agents")
 async def get_agents():
     return {"agents": agents}
 
 @app.get("/admin/agents/available")
 async def available_agents():
+    await _sync_agents_with_disk()
     online_names = set(agents.keys())
     agent_list = []
     
@@ -242,6 +268,9 @@ async def put_agent_card(agent_name: str, payload: Dict[str, Any]):
 
 @app.get("/agent/{agent_name}/peers")
 async def get_agent_peers(agent_name: str):
+    # Proactively sync state before answering discovery request
+    await _sync_agents_with_disk()
+    
     # Get all "valid" agent names (either online or on disk)
     valid_agents = set(_get_disk_agent_names()) | set(agents.keys())
 
