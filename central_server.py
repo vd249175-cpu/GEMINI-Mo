@@ -117,6 +117,18 @@ async def register(payload: RegisterPayload):
     print(f"[Central] 📝 Registered: {name} @ {payload.host}:{payload.port}")
     return {"status": "ok", "agents": list(agents.keys())}
 
+def _get_disk_agent_names() -> List[str]:
+    """Scan filesystem for valid agent directories (those containing AgentCard.json)."""
+    root_path = Path(".")
+    ignored_dirs = {".git", "frontend", "logs", "__pycache__", ".venv", ".gemini", "workspace", "node_modules", "docs"}
+    discovered_names = []
+    if root_path.exists():
+        for path in root_path.iterdir():
+            if path.is_dir() and not path.name.startswith(".") and path.name not in ignored_dirs:
+                if (path / "AgentCard.json").exists():
+                    discovered_names.append(path.name)
+    return discovered_names
+
 @app.get("/agents")
 async def get_agents():
     return {"agents": agents}
@@ -126,16 +138,7 @@ async def available_agents():
     online_names = set(agents.keys())
     agent_list = []
     
-    # Scan filesystem for potential agent directories
-    root_path = Path(".")
-    ignored_dirs = {".git", "frontend", "logs", "__pycache__", ".venv", ".gemini", "workspace", "node_modules", "docs"}
-    
-    # Find all directories that aren't ignored
-    discovered_names = []
-    if root_path.exists():
-        for path in root_path.iterdir():
-            if path.is_dir() and not path.name.startswith(".") and path.name not in ignored_dirs:
-                discovered_names.append(path.name)
+    discovered_names = _get_disk_agent_names()
     
     # Merge online data with disk data
     all_names = sorted(list(set(discovered_names) | online_names))
@@ -239,6 +242,9 @@ async def put_agent_card(agent_name: str, payload: Dict[str, Any]):
 
 @app.get("/agent/{agent_name}/peers")
 async def get_agent_peers(agent_name: str):
+    # Get all "valid" agent names (either online or on disk)
+    valid_agents = set(_get_disk_agent_names()) | set(agents.keys())
+
     # Find spaces this agent belongs to
     my_spaces = [s["id"] for s in spaces if agent_name in s["members"]]
     
@@ -246,7 +252,7 @@ async def get_agent_peers(agent_name: str):
     for s in spaces:
         if s["id"] in my_spaces:
             for member in s["members"]:
-                if member != agent_name:
+                if member != agent_name and member in valid_agents:
                     peers_set.add(member)
     
     peer_list = []
@@ -358,15 +364,32 @@ async def start_agent(agent_name: str):
 
 @app.post("/admin/agents/{agent_name}/stop")
 async def stop_agent(agent_name: str):
+    stopped = False
     if agent_name in processes:
         proc = processes[agent_name]
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            print(f"[Central] 🛑 Stopped agent {agent_name} (PID: {proc.pid})")
+            print(f"[Central] 🛑 Stopped tracked agent {agent_name} (PID: {proc.pid})")
+            stopped = True
         except:
             pass
         del processes[agent_name]
     
+    # Robust cleanup: find orphaned processes by command line if not tracked
+    if not stopped:
+        try:
+            # Look for "agent_host.py ... ./{agent_name}"
+            cmd = f"pgrep -f 'agent_host.py.* ./{agent_name}'"
+            output = subprocess.check_output(cmd, shell=True).decode().strip()
+            if output:
+                for pid_str in output.split():
+                    pid = int(pid_str)
+                    os.kill(pid, signal.SIGTERM)
+                    print(f"[Central] 🧹 Killed orphaned agent process {agent_name} (PID: {pid})")
+                stopped = True
+        except:
+            pass
+
     if agent_name in agents:
         del agents[agent_name]
         
@@ -377,6 +400,18 @@ async def delete_agent(agent_name: str):
     if agent_name in processes:
         await stop_agent(agent_name)
     
+    # Remove agent from all communication spaces
+    global spaces
+    modified = False
+    for space in spaces:
+        if agent_name in space["members"]:
+            space["members"] = [m for m in space["members"] if m != agent_name]
+            modified = True
+    
+    if modified:
+        save_spaces()
+        print(f"[Central] 🧹 Removed {agent_name} from all communication spaces")
+
     agent_path = Path(agent_name)
     if agent_path.exists() and agent_path.is_dir():
         import shutil

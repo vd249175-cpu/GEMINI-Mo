@@ -9,6 +9,13 @@ mkdir -p "$LOG_DIR"
 
 echo "🔄 Restarting Long River Agent System (v2 - Silent Mode)..."
 
+# --- 新增：清理旧进程 ---
+echo "🧹 Cleaning up orphaned processes..."
+pkill -f agent_host.py 2>/dev/null
+pkill -f central_server.py 2>/dev/null
+sleep 1
+# ----------------------
+
 # 端口检测函数，自动寻找空闲端口
 get_free_port() {
     local port=$1
