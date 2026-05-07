@@ -5,8 +5,7 @@
     "color": "#2563eb",
     "members": [
       "judge",
-      "worker",
-      "worker_copy"
+      "worker"
     ]
   },
   {

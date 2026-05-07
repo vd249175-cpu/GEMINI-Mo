@@ -1,6 +1,10 @@
 {
   "name": "Judge Agent",
   "description": "Evaluates character images for compliance with cinematic standards.",
-  "capabilities": ["image-evaluation", "critique", "prompt-optimization"],
+  "capabilities": [
+    "image-evaluation",
+    "critique",
+    "prompt-optimization"
+  ],
   "owner": "apexwave"
 }

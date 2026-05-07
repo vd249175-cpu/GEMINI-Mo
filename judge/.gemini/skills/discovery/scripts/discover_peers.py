@@ -24,13 +24,14 @@ def main():
                 print("No peers discovered. You might not be in any shared Spaces.")
             else:
                 for peer in peers:
-                    name = peer.get("name")
+                    folder_id = peer.get("name")
                     status = peer.get("status")
                     card = peer.get("card", {})
+                    display_name = card.get("name", folder_id)
                     desc = card.get("description", "No description")
                     
                     status_icon = "🟢" if status == "online" else "⚪"
-                    print(f"{status_icon} {name} ({status})")
+                    print(f"{status_icon} {display_name} [{status}]")
                     print(f"   Description: {desc}")
             print("-------------------------------------------")
             

@@ -73,6 +73,7 @@ class SendPayload(BaseModel):
     hops: Optional[int] = 0
     message_id: Optional[str] = None
     type: Optional[str] = "message"
+    sender_name: Optional[str] = None
 
 class SpaceUpdate(BaseModel):
     spaces: List[Dict[str, Any]]
@@ -114,7 +115,7 @@ async def register(payload: RegisterPayload):
             asyncio.create_task(_deliver_to_agent(name, msg))
         mailboxes[name].clear()
     
-    print(f"[Central] 📝 Registered: {name} @ {payload.host}:{payload.port}")
+    print(f"[Central] 📝 Registered: {name} @ {payload.host}:{payload.port}", flush=True)
     return {"status": "ok", "agents": list(agents.keys())}
 
 def _get_disk_agent_names() -> List[str]:
@@ -137,7 +138,7 @@ async def _sync_agents_with_disk():
     online_names = list(agents.keys())
     for name in online_names:
         if name not in disk_names:
-            print(f"[Central] 🕵️ Proactive Sync: Agent '{name}' directory is missing. Stopping...")
+            print(f"[Central] 🕵️ Proactive Sync: Agent '{name}' directory is missing. Stopping...", flush=True)
             await stop_agent(name)
 
     # 2. Scrub spaces of any members that neither exist on disk nor are currently online
@@ -152,7 +153,7 @@ async def _sync_agents_with_disk():
     
     if modified:
         save_spaces()
-        print(f"[Central] 🧹 Proactive Sync: Cleaned up missing members from communication spaces")
+        print(f"[Central] 🧹 Proactive Sync: Cleaned up missing members from communication spaces", flush=True)
 
 @app.get("/agents")
 async def get_agents():
@@ -228,7 +229,7 @@ async def put_agent_gemini(agent_name: str, payload: Dict[str, str]):
     if agent_name in agents:
         info = agents[agent_name]
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(trust_env=False) as client:
                 await client.put(f"http://{info['host']}:{info['port']}/gemini", json=payload, timeout=2)
         except:
             pass # Ignore if notification fails
@@ -259,7 +260,7 @@ async def put_agent_card(agent_name: str, payload: Dict[str, Any]):
         agents[agent_name]["card"] = payload.get("card", {})
         info = agents[agent_name]
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(trust_env=False) as client:
                 await client.put(f"http://{info['host']}:{info['port']}/card", json=payload, timeout=2)
         except:
             pass
@@ -298,18 +299,37 @@ async def get_agent_peers(agent_name: str):
 @app.post("/send")
 async def handle_send(payload: SendPayload):
     sender = payload.sender
-    target = payload.target
+    target = payload.target # This might be an ID or a Display Name
     content = payload.content
     hops = payload.hops + 1
     msg_id = payload.message_id or uuid.uuid4().hex[:12]
+    sender_name = payload.sender_name
 
     if hops > MAX_HOPS:
         return {"status": "dropped", "reason": "hop_limit_exceeded"}
 
+    # 1. Resolve target: if it's a display name, find the corresponding folder ID
+    resolved_target = target
+    target_found = target in agents
+    
+    if not target_found:
+        for agent_id, info in agents.items():
+            card = info.get("card", {})
+            if card.get("name") == target:
+                resolved_target = agent_id
+                target_found = True
+                break
+    
+    # 2. If sender_name is not provided, try to look it up
+    if not sender_name and sender in agents:
+        card = agents[sender].get("card", {})
+        sender_name = card.get("name", sender)
+
     msg = {
         "message_id": msg_id,
         "from": sender,
-        "to": target,
+        "sender_name": sender_name or sender,
+        "to": resolved_target,
         "content": content,
         "files": payload.files,
         "hops": hops,
@@ -320,16 +340,16 @@ async def handle_send(payload: SendPayload):
     if msg_id in delivered_ids:
         return {"status": "duplicate"}
 
-    if target not in agents:
-        if target not in mailboxes:
-            mailboxes[target] = []
-        mailboxes[target].append(msg)
+    if resolved_target not in agents:
+        if resolved_target not in mailboxes:
+            mailboxes[resolved_target] = []
+        mailboxes[resolved_target].append(msg)
         return {"status": "queued", "message_id": msg_id}
 
     delivered_ids.add(msg_id)
     
     # Async delivery
-    asyncio.create_task(_deliver_to_agent(target, msg))
+    asyncio.create_task(_deliver_to_agent(resolved_target, msg))
     return {"status": "delivered", "message_id": msg_id}
 
 async def _deliver_to_agent(target_name: str, msg: dict):
@@ -338,7 +358,7 @@ async def _deliver_to_agent(target_name: str, msg: dict):
     info = agents[target_name]
     url = f"http://{info['host']}:{info['port']}/receive"
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(trust_env=False) as client:
             await client.post(url, json=msg, timeout=5)
     except Exception as e:
         print(f"[Central] ❌ Delivery failed to {target_name}: {e}")
@@ -368,7 +388,8 @@ async def start_agent(agent_name: str):
     port = get_free_port(next_dynamic_port)
     next_dynamic_port = port + 98
     
-    cmd = ["uv", "run", "python", "agent_host.py", str(port), f"./{agent_name}"]
+    import sys
+    cmd = [sys.executable, "agent_host.py", str(port), f"./{agent_name}"]
     try:
         # Start in a new process group so we can kill it later
         log_file = open(f"logs/{agent_name}_{port}.log", "w")
@@ -379,7 +400,7 @@ async def start_agent(agent_name: str):
             preexec_fn=os.setsid
         )
         processes[agent_name] = proc
-        print(f"[Central] 🚀 Started agent {agent_name} on port {port} (PID: {proc.pid})")
+        print(f"[Central] 🚀 Started agent {agent_name} on port {port} (PID: {proc.pid})", flush=True)
         
         # Wait for registration (opportunistic)
         for _ in range(10):
@@ -398,7 +419,7 @@ async def stop_agent(agent_name: str):
         proc = processes[agent_name]
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            print(f"[Central] 🛑 Stopped tracked agent {agent_name} (PID: {proc.pid})")
+            print(f"[Central] 🛑 Stopped tracked agent {agent_name} (PID: {proc.pid})", flush=True)
             stopped = True
         except:
             pass
@@ -414,7 +435,7 @@ async def stop_agent(agent_name: str):
                 for pid_str in output.split():
                     pid = int(pid_str)
                     os.kill(pid, signal.SIGTERM)
-                    print(f"[Central] 🧹 Killed orphaned agent process {agent_name} (PID: {pid})")
+                    print(f"[Central] 🧹 Killed orphaned agent process {agent_name} (PID: {pid})", flush=True)
                 stopped = True
         except:
             pass

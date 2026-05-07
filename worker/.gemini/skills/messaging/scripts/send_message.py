@@ -20,25 +20,12 @@ def main():
 
     central_url = os.environ.get("CENTRAL_SERVER_URL", "http://127.0.0.1:8000")
 
-    # Derive sender name: prefer env var set by agent_host.py
+    # Derive sender name
     project_dir = os.environ.get("GEMINI_PROJECT_DIR", "")
-    
-    # Resolve absolute paths for files
-    resolved_files = []
-    if args.files:
-        for f in args.files:
-            abs_path = os.path.abspath(f)
-            if os.path.exists(abs_path):
-                resolved_files.append(abs_path)
-            else:
-                log(f"Warning: File or folder not found: {f}")
-
-    if project_dir:
-        my_name = os.path.basename(project_dir.rstrip("/"))
-    else:
-        # Fallback: walk up 4 levels from this script's location
-        # scripts/ → communication/ → skills/ → .gemini/ → project_root/
-        my_name = os.path.basename(
+    if not project_dir:
+        # scripts/ → messaging/ → skills/ → .gemini/ → project_root/
+        # Need 5 dirnames to reach project_root from scripts/send_message.py
+        project_dir = os.path.dirname(
             os.path.dirname(
                 os.path.dirname(
                     os.path.dirname(
@@ -48,21 +35,45 @@ def main():
             )
         )
 
+    my_id = os.path.basename(project_dir.rstrip("/"))
+    my_display_name = my_id
+    
+    # Try to read display name from AgentCard.json
+    card_path = os.path.join(project_dir, "AgentCard.json")
+    if os.path.exists(card_path):
+        try:
+            with open(card_path, "r", encoding="utf-8") as f:
+                card = json.load(f)
+                if card.get("name"):
+                    my_display_name = card["name"]
+        except Exception as e:
+            log(f"Warning: Failed to read AgentCard.json: {e}")
+
     # Support multiple recipients (comma-separated or list-like string)
     targets = [t.strip() for t in args.to.replace("[", "").replace("]", "").split(",") if t.strip()]
+
+    # Resolve files
+    resolved_files = []
+    if args.files:
+        for fpath in args.files:
+            if os.path.exists(fpath):
+                resolved_files.append(os.path.abspath(fpath))
+            else:
+                log(f"Warning: File or directory not found: {fpath}")
 
     for target in targets:
         msg_id = uuid.uuid4().hex[:12]
         payload = {
             "message_id": msg_id,
-            "from": my_name,
+            "from": my_id,
+            "sender_name": my_display_name,
             "to": target,
             "content": args.content,
             "files": resolved_files,
             "hops": 0,
         }
 
-        log(f"Sending from '{my_name}' to '{target}' (msg_id={msg_id}) with {len(resolved_files)} files via {central_url}")
+        log(f"Sending from '{my_display_name}' to '{target}' (msg_id={msg_id}) with {len(resolved_files)} files via {central_url}")
 
         try:
             req = urllib.request.Request(

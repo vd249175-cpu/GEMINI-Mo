@@ -24,6 +24,12 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
+import logging
+
+# Configure logging to stdout
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("AgentHost")
+
 # Configuration
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 5001
 PROJECT_DIR = Path(sys.argv[2] if len(sys.argv) > 2 else ".").absolute()
@@ -121,12 +127,40 @@ async def broadcast_terminal(data: bytes):
 
 child_pid = None
 
+async def register_with_central(name, port):
+    print(f"[Host] Attempting to register {name} on port {port}...", flush=True)
+    # Wait a bit for central server to be ready
+    await asyncio.sleep(1)
+    card_path = PROJECT_DIR / "AgentCard.json"
+    card = {}
+    if card_path.exists():
+        try:
+            card = json.loads(card_path.read_text())
+        except: pass
+    
+    payload = {"name": name, "host": "127.0.0.1", "port": port, "card": card}
+    try:
+        async with httpx.AsyncClient(trust_env=False) as client:
+            print(f"[Host] Sending POST to {CENTRAL_SERVER}/register", flush=True)
+            resp = await client.post(f"{CENTRAL_SERVER}/register", json=payload, timeout=5)
+            print(f"[Host] Registration response: {resp.status_code} {resp.text}", flush=True)
+            print(f"\n[Host] Registered {name} with Central Server at {CENTRAL_SERVER}", flush=True)
+    except Exception as e:
+        print(f"\n[Host] Failed to register with Central: {e}", flush=True)
+
+async def registration_task(name, port):
+    try:
+        await register_with_central(name, port)
+    except Exception as e:
+        print(f"[Host] Registration task crashed: {e}", flush=True)
+
 @app.on_event("startup")
 async def startup_event():
     global master_fd, loop, child_pid
     loop = asyncio.get_event_loop()
     
     agent_name = PROJECT_DIR.name
+    print(f"[Host] Starting agent {agent_name}...", flush=True)
     pid, master_fd = pty.fork()
     
     if pid == 0: # Child
@@ -143,54 +177,16 @@ async def startup_event():
         os.chdir(PROJECT_DIR)
         
         # Run gemini and then exec bash so the terminal stays alive
-        bash_cmd = "if command -v gemini >/dev/null 2>&1; then gemini --yolo; else echo 'gemini CLI not found, dropping to bash...'; fi; exec bash"
+        bash_cmd = "if command -v gemini >/dev/null 2>&1; then gemini --yolo -r; else echo 'gemini CLI not found, dropping to bash...'; fi; exec bash"
         os.execvp("bash", ["bash", "-c", bash_cmd])
     else: # Parent
         child_pid = pid
         # Register with central server
-        asyncio.create_task(register_with_central(agent_name, PORT))
+        asyncio.create_task(registration_task(agent_name, PORT))
         # Initial PTY size
         set_winsize(master_fd, 24, 80)
         # Start PTY reader thread
         threading.Thread(target=pty_read_thread, daemon=True).start()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    global master_fd, child_pid
-    print(f"\n[Host] Shutting down agent {PROJECT_DIR.name}...")
-    if child_pid:
-        try:
-            import signal
-            # Kill the entire process group started by the child
-            os.killpg(child_pid, signal.SIGTERM)
-            print(f"[Host] Terminated child process group {child_pid}")
-        except Exception as e:
-            print(f"[Host] Error terminating child: {e}")
-    
-    if master_fd:
-        try:
-            os.close(master_fd)
-        except:
-            pass
-        master_fd = None
-
-async def register_with_central(name, port):
-    # Wait a bit for central server to be ready
-    await asyncio.sleep(1)
-    card_path = PROJECT_DIR / "AgentCard.json"
-    card = {}
-    if card_path.exists():
-        try:
-            card = json.loads(card_path.read_text())
-        except: pass
-    
-    payload = {"name": name, "host": "127.0.0.1", "port": port, "card": card}
-    try:
-        async with httpx.AsyncClient() as client:
-            await client.post(f"{CENTRAL_SERVER}/register", json=payload, timeout=5)
-            print(f"\n[Host] Registered {name} with Central Server at {CENTRAL_SERVER}")
-    except Exception as e:
-        print(f"\n[Host] Failed to register with Central: {e}")
 
 @app.websocket("/terminal")
 async def terminal_websocket(websocket: WebSocket):
@@ -258,7 +254,8 @@ async def smart_pty_write(text: str):
 @app.post("/receive")
 async def receive_mail(request: Request):
     data = await request.json()
-    sender = data.get("from", "unknown")
+    sender_id = data.get("from", "unknown")
+    sender_display = data.get("sender_name", sender_id)
     content = data.get("content", "")
     files = data.get("files", [])
     now_dt = datetime.now()
@@ -267,21 +264,22 @@ async def receive_mail(request: Request):
     if not files:
         # Scenario 1: Direct Text Message (No files)
         # Just notify the terminal directly
-        wake_msg = f"\n[MESSAGE] {now_display} {sender}: {content}"
+        wake_msg = f"\n[MESSAGE] {now_display} {sender_display}: {content}"
         asyncio.create_task(smart_pty_write(wake_msg))
     else:
         # Scenario 2: Mail with Attachments
         mail_base = PROJECT_DIR / "mail"
         mail_base.mkdir(parents=True, exist_ok=True)
         timestamp_dir = now_dt.strftime("%m%d_%H%M%S")
-        dir_name = f"{sender}_{timestamp_dir}"
+        dir_name = f"{sender_id}_{timestamp_dir}"
 
         target_dir = mail_base / dir_name
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # Save message metadata
         msg_info = {
-            "from": sender,
+            "from": sender_id,
+            "sender_name": sender_display,
             "content": content,
             "timestamp": data.get("timestamp"),
             "message_id": data.get("message_id")
@@ -299,7 +297,7 @@ async def receive_mail(request: Request):
                     shutil.copy2(src, dst)
 
         # Notify terminal about the mail
-        wake_msg = f"\n[MAIL] {now_display} 来自 {sender} 的新消息（含附件）。内容已存入 mail/{dir_name}/。"
+        wake_msg = f"\n[MAIL] {now_display} 来自 {sender_display} 的新消息（含附件）。内容已存入 mail/{dir_name}/。"
         asyncio.create_task(smart_pty_write(wake_msg))
     
     return {"status": "received"}

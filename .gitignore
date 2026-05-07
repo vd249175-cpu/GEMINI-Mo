@@ -219,4 +219,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-worker/.gemini/skills/handswriter-image-gen/
+# Project specific ignores
+**/images/
+**/mail/
+logs/
+node_modules/
+frontend/dist/
